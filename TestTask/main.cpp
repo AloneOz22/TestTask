@@ -134,12 +134,12 @@ void process() {
 	try{
 		unique_lock<mutex> uLocker(conditionLocker);
 		while (!endBool) {
-			while (!periodBool && !processBool && !endBool) {
+			do {
 				if (orders.empty()) {
 					device.status();
 				}
 				check.wait_for(uLocker, msPeriod);
-			}
+			} while (!periodBool && !processBool && !endBool);
 
 			periodBool = false;
 			queueLocker.lock();
@@ -150,30 +150,41 @@ void process() {
 				case 11:
 					device.pump.turnOn(speeds.front());
 					speeds.pop();
-					processBool = false;
+					if (orders.empty()) {
+						processBool = false;
+					}
 					break;
 				case 12:
 					device.pump.turnOff();
-					processBool = false;
+					if (orders.empty()) {
+						processBool = false;
+					}
 					break;
 				case 21:
 					device.D1.setPressure(pressuresD1.front());
 					pressuresD1.pop();
-					processBool = false;
+					if (orders.empty()) {
+						processBool = false;
+					}
 					break;
 				case 22:
 					device.D1.reset();
-					processBool = false;
+					if (orders.empty()) {
+						processBool = false;
+					}
 					break;
 				case 31:
 					device.D2.setPressure(pressuresD2.front());
 					pressuresD2.pop();
-					processBool = false;
+					if (orders.empty()) {
+						processBool = false;
+					}
 					break;
 				case 32:
-					device.D2.setPressure(pressuresD2.front());
-					pressuresD2.pop();
-					processBool = false;
+					device.D2.reset();
+					if (orders.empty()) {
+						processBool = false;
+					}
 					break;
 				}
 			}
