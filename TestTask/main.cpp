@@ -2,141 +2,182 @@
 #include <thread>
 #include <chrono>
 #include <mutex>
+#include <condition_variable>
 #include "Device.h"
 
 using namespace std;
 
-void menu(Device &device, queue<int> &orders, bool &menuIsClosed, queue<int> &speeds, queue<int> &pressuresD1, queue<int> &pressuresD2, chrono::milliseconds &period) {
-	int order;
-	cout << "Select:\n1 - Pump\n2 - First sensor\n3 - Second sensor\n4 - Status\n5 - Change period\n Other key - Exit\n";
-	cin >> order;
-	switch (order) {
-	case 1:
-		int pumpOrder;
-		cout << "Select order:\n1 - Set speed\n2 - Turn of\nOther key - Exit\n";
-		cin >> pumpOrder;
-		switch (pumpOrder) {
-		case 1:
-			int speed;
-			cout << "Enter speed\n";
-			cin >> speed;
-			speeds.push(speed);
-			orders.push(11);
-			break;
-		case 2:
-			orders.push(12);
-			break;
-		default:
-			break;
+mutex queueLocker;
+mutex conditionLocker;
+condition_variable check;
+bool periodBool = false;
+bool processBool = false;
+bool endBool = false;
+
+Device device = Device();
+queue<int> orders;
+queue<int> speeds;
+queue<int> pressuresD1;
+queue<int> pressuresD2;
+chrono::milliseconds msPeriod = 10000ms;
+
+void newMenu() {
+	try {
+		while (!endBool) {
+			int order;
+			cout << "Select:\n1 - Pump\n2 - First sensor\n3 - Second sensor\n4 - Status\n5 - Change period\n Other key - Exit\n";
+			cin >> order;
+			{
+				switch (order) {
+				case 1:
+					int pumpOrder;
+					cout << "Select order:\n1 - Set speed\n2 - Turn of\nOther key - Back\n";
+					cin >> pumpOrder;
+					switch (pumpOrder) {
+					case 1:
+						int speed;
+						cout << "Enter speed\n";
+						cin >> speed;
+						queueLocker.lock();
+						speeds.push(speed);
+						orders.push(11);
+						queueLocker.unlock();
+						processBool = true;
+						break;
+					case 2:
+						queueLocker.lock();
+						orders.push(12);
+						queueLocker.unlock();
+						processBool = true;
+						break;
+					default:
+						break;
+					}
+					break;
+				case 2:
+					int sensor1Order;
+					cout << "Select order:\n1 - Set pressure\n2 - Turn pressure to zero\nOther key - Back\n";
+					cin >> sensor1Order;
+					switch (sensor1Order) {
+					case 1:
+						int pressure;
+						cout << "Enter pressure\n";
+						cin >> pressure;
+						queueLocker.lock();
+						pressuresD1.push(pressure);
+						orders.push(21);
+						queueLocker.unlock();
+						processBool = true;
+						break;
+					case 2:
+						queueLocker.lock();
+						orders.push(22);
+						queueLocker.unlock();
+						processBool = true;
+						break;
+					default:
+						break;
+					}
+					break;
+				case 3:
+					int sensor2Order;
+					cout << "Select order:\n1 - Set pressure\n2 - Turn pressure to zero\nOther key - Back\n";
+					cin >> sensor2Order;
+					switch (sensor2Order) {
+					case 1:
+						int pressure;
+						cout << "Enter pressure\n";
+						cin >> pressure;
+						queueLocker.lock();
+						pressuresD2.push(pressure);
+						orders.push(31);
+						queueLocker.unlock();
+						processBool = true;
+						break;
+					case 2:
+						queueLocker.lock();
+						orders.push(32);
+						queueLocker.unlock();
+						processBool = true;
+						break;
+					default:
+						break;
+					}
+					break;
+				case 4:
+					device.status();
+					break;
+				case 5:
+					int intPeriod;
+					cout << "Enter period in milliseconds\n";
+					cin >> intPeriod;
+					queueLocker.lock();
+					msPeriod = (chrono::milliseconds)intPeriod;
+					queueLocker.unlock();
+					periodBool = true;
+					check.notify_one();
+					break;
+				default:
+					endBool = true;
+					check.notify_one();
+					break;
+				}
+			}
 		}
-		menu(device, orders, menuIsClosed, speeds, pressuresD1, pressuresD2, period);
-		break;
-	case 2:
-		int sensor1Order;
-		cout << "Select order:\n1 - Set pressure\n2 - Turn pressure to zero\nOther key - Exit\n";
-		cin >> sensor1Order;
-		switch (sensor1Order) {
-		case 1:
-			int pressure;
-			cout << "Enter pressure\n";
-			cin >> pressure;
-			pressuresD1.push(pressure);
-			orders.push(21);
-			break;
-		case 2:
-			orders.push(22);
-			break;
-		default:
-			break;
-		}
-		menu(device, orders, menuIsClosed, speeds, pressuresD1, pressuresD2, period);
-		break;
-	case 3:
-		int sensor2Order;
-		cout << "Select order:\n1 - Set pressure\n2 - Turn pressure to zero\nOther key - Exit\n";
-		cin >> sensor2Order;
-		switch (sensor2Order) {
-		case 1:
-			int pressure;
-			cout << "Enter pressure\n";
-			cin >> pressure;
-			pressuresD2.push(pressure);
-			orders.push(31);
-			break;
-		case 2:
-			orders.push(32);
-			break;
-		default:
-			break;
-		}
-		menu(device, orders, menuIsClosed, speeds, pressuresD1, pressuresD2, period);
-		break;
-	case 4:
-		device.status();
-		menu(device, orders, menuIsClosed, speeds, pressuresD1, pressuresD2, period);
-		break;
-	case 5:
-		int intPeriod;
-		cout << "Enter period in milliseconds\n";
-		cin >> intPeriod;
-		period = (chrono::milliseconds)intPeriod;
-		this_thread::yield();
-		menu(device, orders, menuIsClosed, speeds, pressuresD1, pressuresD2, period);
-		break;
-	default:
-		menuIsClosed = true;
-		this_thread::yield();
-		break;
+	}
+	catch (exception e) {
+		cout << e.what() << endl;
 	}
 }
 
-void process(Device& device, queue<int>& orders, bool& menuIsClosed, queue<int>& speeds, queue<int>& pressuresD1, queue<int>& pressuresD2, chrono::milliseconds& period) {
+void process() {
 	try{
-		while (menuIsClosed == false) {
-			if (orders.empty()) {
-				device.status();
+		unique_lock<mutex> uLocker(conditionLocker);
+		while (!endBool) {
+			while (!periodBool && !processBool && !endBool) {
+				if (orders.empty()) {
+					device.status();
+				}
+				check.wait_for(uLocker, msPeriod);
 			}
-			else {
+
+			periodBool = false;
+			queueLocker.lock();
+			if (!orders.empty()) {
 				int order = orders.front();
 				orders.pop();
 				switch (order) {
 				case 11:
-					//m.lock();
 					device.pump.turnOn(speeds.front());
 					speeds.pop();
-					//m.unlock();
+					processBool = false;
 					break;
 				case 12:
-					//m.lock();
 					device.pump.turnOff();
-					//m.unlock();
+					processBool = false;
 					break;
 				case 21:
-					//m.lock();
 					device.D1.setPressure(pressuresD1.front());
 					pressuresD1.pop();
-					//m.unlock();
+					processBool = false;
 					break;
 				case 22:
-					//m.lock();
 					device.D1.reset();
-					//m.unlock();
+					processBool = false;
 					break;
 				case 31:
-					//m.lock();
 					device.D2.setPressure(pressuresD2.front());
 					pressuresD2.pop();
-					//m.unlock();
+					processBool = false;
 					break;
 				case 32:
-					//m.lock();
 					device.D2.setPressure(pressuresD2.front());
 					pressuresD2.pop();
-					//m.unlock();
+					processBool = false;
 					break;
 				}
 			}
-			this_thread::sleep_for(period);
+			queueLocker.unlock();
 		}
 	}
 	catch (exception e) {
@@ -145,23 +186,8 @@ void process(Device& device, queue<int>& orders, bool& menuIsClosed, queue<int>&
 }
 int main() {
 	try {
-		//mutex m;
-		Device device = Device();
-		queue<int> orders;
-		bool menuIsClosed = false;
-		queue<int> speeds;
-		queue<int> pressuresD1;
-		queue<int> pressuresD2;
-		chrono::milliseconds msPeriod = 20000ms;
-		thread menuThread([&]()
-			{
-				menu(device, orders, menuIsClosed, speeds, pressuresD1, pressuresD2, msPeriod);
-			});
-		thread processThread([&]()
-			{
-				process(device, orders, menuIsClosed, speeds, pressuresD1, pressuresD2, msPeriod);
-			});
-		menuThread.join();
+		thread processThread(process);
+		newMenu();
 		processThread.join();
 		return 0;
 	}
